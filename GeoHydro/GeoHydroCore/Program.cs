@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using OPTANO.Modeling.Common;
 using OPTANO.Modeling.Optimization;
@@ -8,12 +10,16 @@ using OPTANO.Modeling.Optimization.Solver.GLPK;
 
 namespace GeoHydroCore
 {
+    class MarkerInfo
+    {
+        public string MarkerName { get; set; }
+        public double Weight { get; set; } = 1.0;
+    }
+
     class Program
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
-
             // TODO:
             // load data from CSV
             // load configuration
@@ -25,16 +31,63 @@ namespace GeoHydroCore
             // return results (csv + info about run configuration)
         }
 
+
+        static List<Source> ReadInput(string file)
+        {
+            var sources = new List<Source>();
+            using (var reader = File.OpenText(file))
+            {
+                var hdrs = reader.ReadLine();
+                var markerNames = hdrs.Split(';').Skip(2).Select(x => new MarkerInfo()
+                {
+                    MarkerName = x,
+                }).ToList();
+
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    var split = line.Split(';');
+                    var srcCode = split[0];
+                    var srcName = split[1];
+
+                    var source = new Source()
+                    {
+                        Code = srcCode,
+                        Name = srcName,
+                        MarkerValues = new List<MarkerValue>()
+                    };
+
+                    for (int i = 0; i < markerNames.Count; i++)
+                    {
+                        var markerInfo = markerNames[i];
+                        var markerVal = split[i + 2];
+                        double? val = null;
+                        if (int.TryParse(markerVal, out var v))
+                        {
+                            val = v;
+                        }
+
+                        source.MarkerValues.Add(new MarkerValue()
+                        {
+                            MarkerInfo = markerInfo,
+                            Value = val,
+                            Source = source,
+                        });
+                    }
+                    sources.Add(source);
+                }
+            }
+            return sources;
+        }
+        
+
         static void SolveTheModel(HydroMixProblem problem)
         {
-            // Use long names for easier debugging/model understanding.
             var config = new Configuration();
             config.NameHandling = NameHandlingStyle.UniqueLongNames;
             config.ComputeRemovedVariables = true;
             using (var scope = new ModelScope(config))
             {
-
-                // Get a solver instance, change your solver
                 using (var solver = new GLPKSolver())
                 {
                     // solve the model
@@ -55,61 +108,32 @@ namespace GeoHydroCore
         }
     }
 
+    internal class Source
+    {
+        public List<MarkerValue> MarkerValues { get; set; }
+        public string Code { get; set; }
+        public string Name { get; set; }
+        public double Weight { get; set; } = 1.0;
+    }
+
+    internal class MarkerValue
+    {
+        public MarkerInfo MarkerInfo { get; set; }
+        public double? Value { get; set; }
+        public Source Source { get; set; }
+    }
+
     class HydroSourceValues
     {
-        public List<(string marker, List<MarkerSourceValue> values)> GetMarkers()
+        public List<Source> GetSourcesList()
         {
-            return _vals.Keys
-                        .GroupBy(x => x.Marker)
-                        .Select(x => (x.Key, x.Select(c => new MarkerSourceValue()
-                        {
-                            Marker = c.Marker,
-                            Source = c.Source,
-                            Value = _vals[c],
-                        }).ToList()))
-                        .ToList();
+            throw new NotImplementedException();
         }
 
-
-        Dictionary<SourceMarker, double> _vals = new Dictionary<SourceMarker, double>();
-
-        public List<string> GetSources()
+        public List<MarkerInfo> GetMarkerInfos()
         {
-            return _vals.Keys.Select(k => k.Source).Distinct().ToList();
+            throw new NotImplementedException();
         }
-
-        public double this[string source, string marker]
-        {
-            set
-            {
-                var sourceMarker = new SourceMarker(source, marker);
-
-                if (_vals.ContainsKey(sourceMarker))
-                {
-                    throw new InvalidOperationException("Already exists");
-                }
-                _vals.Add(sourceMarker, value);
-            }
-        }
-    }
-
-    struct SourceMarker
-    {
-        public SourceMarker(string source, string marker)
-        {
-            Source = source;
-            Marker = marker;
-        }
-
-        public string Source { get; set; }
-        public string Marker { get; set; }
-    }
-
-    class MarkerSourceValue
-    {
-        public string Marker { get; set; }
-        public string Source { get; set; }
-        public double Value { get; set; }
     }
 
     class HydroMixModelConfig
@@ -122,34 +146,35 @@ namespace GeoHydroCore
 
     class Target
     {
-        public double this[string marker] { get { return 0; } }
+        public double this[MarkerInfo marker] { get { return 0; } }
     }
 
     class HydroMixProblem
     {
         public Model Model { get; }
 
-        public VariableCollection<string> SourceContribution { get; set; }
-        public VariableCollection<string> SourceUsed { get; set; }
+        public VariableCollection<Source> SourceContribution { get; set; }
+        public VariableCollection<Source> SourceUsed { get; set; }
 
         public HydroMixProblem(HydroSourceValues values, HydroMixModelConfig config, Target target)
         {
             Model = new Model();
-            var sources = values.GetSources();
-            SourceContribution = new VariableCollection<string>(
+            //var sources = values.GetSources();
+            var sources = values.GetSourcesList();
+            SourceContribution = new VariableCollection<Source>(
                 Model,
                 sources,
                 "SourceContributions",
-                s => $"Source {s} contribution",
+                s => $"Source {s.Code} contribution",
                 s => 0,
                 s => 1, // weights should be >= 0 <= 1
                 s => OPTANO.Modeling.Optimization.Enums.VariableType.Continuous);
 
-            SourceUsed = new VariableCollection<string>(
+            SourceUsed = new VariableCollection<Source>(
                 Model,
                 sources,
                 "SourceIsUsed",
-                s => $"Indicator whether source {s} is used.",
+                s => $"Indicator whether source {s.Code} is used.",
                 s => 0,
                 s => 1,
                 s => OPTANO.Modeling.Optimization.Enums.VariableType.Binary);
@@ -159,13 +184,12 @@ namespace GeoHydroCore
             {
                 var indicator = SourceContribution[source] >= 2 * (1 - SourceUsed[source]);
 
-                Model.AddConstraint(indicator,
-                                    $"Indicator for {source}");
+                Model.AddConstraint(indicator, $"Indicator for {source.Code}");
 
                 if (config.MinimalSourceContribution > 0)
                 {
                     Model.AddConstraint(SourceContribution[source] >= config.MinimalSourceContribution * SourceUsed[source],
-                                        "Minimal source contribution.");
+                                        $"Minimal source {source.Code} contribution.");
                 }
             }
 
@@ -173,13 +197,14 @@ namespace GeoHydroCore
             var contributionsSum = Expression.Sum(sources.Select(s => SourceContribution[s]));
             Model.AddConstraint(contributionsSum == 1, "Contributions sum equals 1");
 
+            // max sources contributing
             var usedSourcesCount = Expression.Sum(sources.Select(s => SourceUsed[s]));
-
             if (config.MaxSourcesUsed.HasValue)
             {
                 Model.AddConstraint(usedSourcesCount <= config.MaxSourcesUsed.Value);
             }
 
+            // min sources contributing
             if (config.MinSourcesUsed.HasValue)
             {
                 Model.AddConstraint(usedSourcesCount >= config.MinSourcesUsed.Value);
@@ -188,11 +213,19 @@ namespace GeoHydroCore
             var epsilons = new List<Variable>();
 
             // equation for each marker
-            foreach (var markerVal in values.GetMarkers())
+            foreach (var markerInfo in values.GetMarkerInfos())
             {
-                var markerEpsilon = new Variable($"Diff for {markerVal.marker}", 0);
-                var sourcesContributedToMarker = Expression.Sum(markerVal.values.Select(x => SourceContribution[x.Source] * x.Value));
-                Model.AddConstraint(sourcesContributedToMarker == markerEpsilon + target[markerVal.marker]);
+                var markerEpsilon = new Variable($"Diff for {markerInfo.MarkerName}", 0);
+
+                // get all values for current marker
+                var markerValues = sources.Select(s => s.MarkerValues.Single(mv => mv.MarkerInfo == markerInfo));
+
+                var sourcesContributedToMarker =
+                    Expression.Sum(
+                        markerValues.Select(x => x.Source.Weight * SourceContribution[x.Source] * x.Value.Value * x.MarkerInfo.Weight));
+
+                Model.AddConstraint(sourcesContributedToMarker == markerEpsilon + target[markerInfo]);
+
                 epsilons.Add(markerEpsilon);
             }
 
