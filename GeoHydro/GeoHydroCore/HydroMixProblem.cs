@@ -44,6 +44,8 @@ namespace GeoHydroCore
                                                                mi => VariableType.Continuous
             );
 
+            // https://math.stackexchange.com/questions/2571788/indicator-variable-if-x-is-in-specific-range
+
             // constraints
             foreach (var source in sources)
             {
