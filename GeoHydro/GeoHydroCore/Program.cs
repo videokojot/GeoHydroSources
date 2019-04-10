@@ -12,6 +12,8 @@ namespace GeoHydroCore
 {
     class Program
     {
+        // optano modelling
+        // https://groups.google.com/forum/#!topic/optano-modeling/FN6V4u6wWpM
         static void Main(string[] args)
         {
             // TODO:
