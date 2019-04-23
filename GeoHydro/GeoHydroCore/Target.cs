@@ -2,14 +2,14 @@
 {
     class Target
     {
-        private readonly Source s;
+        public Source Source { get; }
 
-        public Target(Source s)
+        public Target(Source source)
         {
-            this.s = s;
+            this.Source = source;
         }
 
-        public double this[MarkerInfo marker] { get { return s[marker].Value; } }
+        public double this[MarkerInfo marker] { get { return Source[marker].Value; } }
 
     }
 }

@@ -17,7 +17,7 @@ namespace GeoHydroCore
         {
             Model = new Model();
             //var sources = values.GetSources();
-            var sources = values.GetSourcesList();
+            var sources = values.Sources();
             SourceContribution = new VariableCollection<Source>(
                 Model,
                 sources,
@@ -37,7 +37,7 @@ namespace GeoHydroCore
                 s => OPTANO.Modeling.Optimization.Enums.VariableType.Binary);
 
             EpsilonErrors = new VariableCollection<MarkerInfo>(Model,
-                                                               values.GetMarkerInfos(),
+                                                               values.MarkerInfos(),
                                                                "Epsilon error for each marker", mi => $"Error for marker: {mi.MarkerName}.",
                                                                mi => double.MinValue,
                                                                mi => double.MaxValue,
@@ -78,7 +78,7 @@ namespace GeoHydroCore
             }
 
             // equation for each marker
-            foreach (var markerInfo in values.GetMarkerInfos())
+            foreach (var markerInfo in values.MarkerInfos())
             {
                 var markerEpsilon = EpsilonErrors[markerInfo];
                 // get all values for current marker
@@ -91,7 +91,7 @@ namespace GeoHydroCore
             }
 
             // min: diff between target and resulting mix
-            Model.AddObjective(new Objective(Expression.Sum(values.GetMarkerInfos().Where(mi => mi.Weight > 0).Select(mi => EpsilonErrors[mi] * mi.Weight)),
+            Model.AddObjective(new Objective(Expression.Sum(values.MarkerInfos().Where(mi => mi.Weight > 0).Select(mi => EpsilonErrors[mi] * mi.Weight)),
                                              "Difference between mix and target.",
                                              ObjectiveSense.Minimize));
         }

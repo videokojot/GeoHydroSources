@@ -11,19 +11,24 @@ namespace GeoHydroCore
         private List<Source> _sources;
 
         public HydroSourceValues(List<Source> sources,
-                                 List<MarkerInfo> markerInfos, NAValuesHandling naValuesHandling)
+                                 List<MarkerInfo> markerInfos,
+                                 NAValuesHandling naValuesHandling,
+                                 Target target)
         {
             _sources = sources;
             _markerInfos = markerInfos;
             this.naValuesHandling = naValuesHandling;
+            Target = target;
         }
 
-        public List<Source> GetSourcesList()
+        public Target Target { get; set; }
+
+        public List<Source> Sources()
         {
             return _sources;
         }
 
-        public List<MarkerInfo> GetMarkerInfos()
+        public List<MarkerInfo> MarkerInfos()
         {
             return _markerInfos;
         }
@@ -33,7 +38,7 @@ namespace GeoHydroCore
             HandleNAValues();
             foreach (var markerInfo in _markerInfos)
             {
-                var markerValues = _sources.Select(x => x[markerInfo]).ToList();
+                var markerValues = _sources.Append(Target.Source).Select(x => x[markerInfo]).ToList();
                 var absMaxVal = markerValues.Select(mv => Math.Abs(mv.OriginalValue.Value)).Max();
                 markerInfo.SetCoeficient(absMaxVal);
             }

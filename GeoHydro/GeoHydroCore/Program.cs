@@ -12,19 +12,13 @@ namespace GeoHydroCore
 {
     class Program
     {
-        // optano modelling
+        // glpk library referencing
         // https://groups.google.com/forum/#!topic/optano-modeling/FN6V4u6wWpM
         static void Main(string[] args)
         {
             // TODO:
-            // load data from CSV
-            // load configuration
-            // do normalization of markers
-            // do source weighting (ie. max contribution of source)
+            // do normalization also on targets
 
-            // create model
-            // solve model
-            // return results (csv + info about run configuration)
             Test();
         }
 
@@ -46,11 +40,12 @@ namespace GeoHydroCore
 
             foreach (var targetSource in targets)
             {
+                var target = new Target(targetSource);
                 foreach (var config in readConfigs)
                 {
-                    var model = program.CreateModel(inputSources, makrerInfos, config);
+                    var model = program.CreateModel(inputSources, makrerInfos, config, target);
 
-                    program.SolveTheModel(model, config, new Target(targetSource));
+                    program.SolveTheModel(model, config);
                 }
             }
         }
@@ -191,24 +186,23 @@ namespace GeoHydroCore
             return (sources, markerInfos);
         }
 
-        HydroSourceValues CreateModel(List<Source> sources, List<MarkerInfo> markerInfos, HydroMixModelConfig config)
+        HydroSourceValues CreateModel(List<Source> sources, List<MarkerInfo> markerInfos, HydroMixModelConfig config, Target t)
         {
-            var ret = new HydroSourceValues(sources, markerInfos, config.NaValuesHandling);
+            var ret = new HydroSourceValues(sources, markerInfos, config.NaValuesHandling, t);
             ret.StandardizeValues();
             return ret;
         }
 
 
         void SolveTheModel(HydroSourceValues inputValues,
-                           HydroMixModelConfig config,
-                           Target target)
+                           HydroMixModelConfig config)
         {
             var optanoConfig = new Configuration();
             optanoConfig.NameHandling = NameHandlingStyle.UniqueLongNames;
             optanoConfig.ComputeRemovedVariables = true;
             using (var scope = new ModelScope(optanoConfig))
             {
-                var problem = new HydroMixProblem(inputValues, config, target);
+                var problem = new HydroMixProblem(inputValues, config, inputValues.Target);
                 using (var solver = new GLPKSolver())
                 {
                     //solver.
@@ -223,11 +217,26 @@ namespace GeoHydroCore
 
                     // print objective and variable decisions
                     Console.WriteLine($"{solution.ObjectiveValues.Single()}");
-                    //problem..Variables.ForEach(x => Console.WriteLine($"{x.ToString().PadRight(36)}: {x.Value}"));
-                    //problem..Variables.ForEach(y => Console.WriteLine($"{y.ToString().PadRight(36)}: {y.Value}"));
+
+                    var usedSources = inputValues.Sources().Where(s => problem.SourceUsed[s].Value == 1).ToList();
+                    var unusedSources = inputValues.Sources().Where(s => problem.SourceUsed[s].Value == 0).ToList();
+
+                    var sourcesContributions = inputValues.Sources().Select(s => (Source: s, Contribution: problem.SourceContribution[s].Value));
+
+                    foreach (var source in sourcesContributions)
+                    {
+                        Console.WriteLine($"Source: {source.Source.Code,15} | Contribution: {source.Contribution} ");
+                    }
+
+                    foreach (var markerInfo in inputValues.MarkerInfos())
+                    {
+                        var epsilonMarkerError = problem.EpsilonErrors[markerInfo].Value;
+                        var absoluteValue = markerInfo.
+                        Console.WriteLine($"Marker '{markerInfo.MarkerName,10}' error contribution: {epsilonMarkerError} standardized. Aboslute {}");
+                    }
 
                     problem.Model.VariableStatistics.WriteCSV(AppDomain.CurrentDomain.BaseDirectory);
-                    Console.ReadLine();
+                    //Console.ReadLine();
                 }
             }
         }
