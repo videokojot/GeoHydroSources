@@ -63,6 +63,10 @@ namespace GeoHydroCore
 
                 while ((line = reader.ReadLine()) != null)
                 {
+                    if (line.StartsWith("#"))
+                    {
+                        continue;
+                    }
                     var split = line.Split(";");
 
                     var conf = new HydroMixModelConfig()
@@ -142,6 +146,10 @@ namespace GeoHydroCore
                 int lnCount = 1;
                 while ((line = reader.ReadLine()) != null)
                 {
+                    if (line.StartsWith("#"))
+                    {
+                        continue;
+                    }
                     lnCount++;
                     var split = line.Split(';');
                     var srcCode = split[0];
@@ -217,22 +225,22 @@ namespace GeoHydroCore
 
                     // print objective and variable decisions
                     Console.WriteLine($"{solution.ObjectiveValues.Single()}");
-
-                    var usedSources = inputValues.Sources().Where(s => problem.SourceUsed[s].Value == 1).ToList();
-                    var unusedSources = inputValues.Sources().Where(s => problem.SourceUsed[s].Value == 0).ToList();
+                    var TOLERANCE = 0.001;
+                    var usedSources = inputValues.Sources().Where(s => Math.Abs(problem.SourceUsed[s].Value - 1) < TOLERANCE).ToList();
+                    var unusedSources = inputValues.Sources().Where(s => Math.Abs(problem.SourceUsed[s].Value) < TOLERANCE).ToList();
 
                     var sourcesContributions = inputValues.Sources().Select(s => (Source: s, Contribution: problem.SourceContribution[s].Value));
 
-                    foreach (var source in sourcesContributions)
+                    foreach (var source in sourcesContributions.Where(x => x.Contribution > 0.01).OrderByDescending(x => x.Contribution))
                     {
-                        Console.WriteLine($"Source: {source.Source.Code,15} | Contribution: {source.Contribution} ");
+                        Console.WriteLine($"Source: {source.Source.Code,15} | Contribution: {source.Contribution * 100:F0} ");
                     }
 
-                    foreach (var markerInfo in inputValues.MarkerInfos())
+                    foreach (var markerInfo in inputValues.MarkerInfos().Where(x => x.Weight > 0))
                     {
                         var epsilonMarkerError = problem.EpsilonErrors[markerInfo].Value;
-                        var absoluteValue = markerInfo.
-                        Console.WriteLine($"Marker '{markerInfo.MarkerName,10}' error contribution: {epsilonMarkerError} standardized. Aboslute {}");
+                        var absoluteValue = markerInfo.NormalizationCoefficient * epsilonMarkerError;
+                        Console.WriteLine($"Marker '{markerInfo.MarkerName,10}' error contribution: {epsilonMarkerError} standardized. Aboslute {absoluteValue}");
                     }
 
                     problem.Model.VariableStatistics.WriteCSV(AppDomain.CurrentDomain.BaseDirectory);

@@ -39,7 +39,7 @@ namespace GeoHydroCore
             EpsilonErrors = new VariableCollection<MarkerInfo>(Model,
                                                                values.MarkerInfos(),
                                                                "Epsilon error for each marker", mi => $"Error for marker: {mi.MarkerName}.",
-                                                               mi => double.MinValue,
+                                                               mi => 0,
                                                                mi => double.MaxValue,
                                                                mi => VariableType.Continuous
             );
@@ -78,7 +78,7 @@ namespace GeoHydroCore
             }
 
             // equation for each marker
-            foreach (var markerInfo in values.MarkerInfos())
+            foreach (var markerInfo in values.MarkerInfos().Where(mi => mi.Weight > 0))
             {
                 var markerEpsilon = EpsilonErrors[markerInfo];
                 // get all values for current marker
