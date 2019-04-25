@@ -49,7 +49,7 @@ namespace GeoHydroCore
             // constraints
             foreach (var source in sources)
             {
-                var indicator = SourceContribution[source] + SourceUsed[source] >= 1.01 * SourceUsed[source];
+                var indicator = SourceContribution[source] + SourceUsed[source] <= 1000 * SourceUsed[source];
 
                 Model.AddConstraint(indicator, $"Indicator for {source.Code}");
 
