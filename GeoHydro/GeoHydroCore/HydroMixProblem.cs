@@ -49,9 +49,13 @@ namespace GeoHydroCore
             // constraints
             foreach (var source in sources)
             {
+                // force not-used when contribution = 0
                 var indicator = SourceContribution[source] + SourceUsed[source] <= 1000 * SourceUsed[source];
-
                 Model.AddConstraint(indicator, $"Indicator for {source.Code}");
+
+                // force used when contribution > 0
+                var indicator2 = SourceUsed[source] - SourceContribution[source] >= 0;
+                Model.AddConstraint(indicator2, $"Indicator for {source.Code}");
 
                 if (config.MinimalSourceContribution > 0)
                 {

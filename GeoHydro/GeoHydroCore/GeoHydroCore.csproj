@@ -23,7 +23,6 @@
 
 
   <ItemGroup>
-
     <Reference Include="libglpk-cli">
       <HintPath>..\glpk-4.60\w64\libglpk-cli.dll</HintPath>
     </Reference>
