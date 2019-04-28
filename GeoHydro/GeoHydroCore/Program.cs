@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using OPTANO.Modeling.Common;
 using OPTANO.Modeling.Optimization;
 using OPTANO.Modeling.Optimization.Configuration;
@@ -16,9 +17,6 @@ namespace GeoHydroCore
         // https://groups.google.com/forum/#!topic/optano-modeling/FN6V4u6wWpM
         static void Main(string[] args)
         {
-            // TODO:
-            // do normalization also on targets
-
             Test();
         }
 
@@ -37,7 +35,7 @@ namespace GeoHydroCore
             }
 
             var readConfigs = program.ReadConfig("InputData\\configuration.csv", makrerInfos, inputSources);
-
+            var solutions = new List<GeoHydroSolutionOutput>();
             foreach (var targetSource in targets)
             {
                 var target = new Target(targetSource);
@@ -45,8 +43,14 @@ namespace GeoHydroCore
                 {
                     var model = program.CreateModel(inputSources, makrerInfos, config, target);
 
-                    program.SolveTheModel(model, config);
+                    solutions.Add(program.SolveTheModel(model, config));
                 }
+            }
+            Console.WriteLine("\n\n\n\n");
+            Console.WriteLine("  ---------  RESULTS: ------------");
+            foreach (var geoHydroSolutionOutput in solutions)
+            {
+                Console.WriteLine(geoHydroSolutionOutput.TextOutput);
             }
         }
 
@@ -69,22 +73,22 @@ namespace GeoHydroCore
                     }
                     var split = line.Split(";");
 
-                    var conf = new HydroMixModelConfig()
-                    {
-                        MinimalSourceContribution = double.Parse(split[0]),
-                        MinSourcesUsed = int.Parse(split[1]),
-                        MaxSourcesUsed = int.Parse(split[2]),
-                    };
+                    var pos = 0;
+                    var conf = new HydroMixModelConfig();
 
-                    var parsed = Enum.TryParse<NAValuesHandling>(split[3], out var res);
+                    conf.ConfigAlias = split[pos++];
+                    conf.MinimalSourceContribution = double.Parse(split[pos++], CultureInfo.InvariantCulture);
+                    conf.MinSourcesUsed = int.Parse(split[pos++]);
+                    conf.MaxSourcesUsed = int.Parse(split[pos++]);
 
+                    var parsed = Enum.TryParse<NAValuesHandling>(split[pos++], out var res);
                     if (!parsed)
                     {
                         throw new InvalidOperationException("NA values handling unknown value: either 'Remove' or 'SetMean'");
                     }
                     conf.NaValuesHandling = res;
 
-                    for (int i = 4; i < split.Length; i++)
+                    for (int i = pos; i < split.Length; i++)
                     {
                         var src = sources.SingleOrDefault(x => x.Code == colNames[i]);
                         var mi = markerInfos.SingleOrDefault(x => x.MarkerName == colNames[i]);
@@ -101,7 +105,7 @@ namespace GeoHydroCore
                         }
                         else
                         {
-                            val = double.Parse(split[i]);
+                            val = double.Parse(split[i], CultureInfo.InvariantCulture);
                         }
 
                         if (src != null)
@@ -202,9 +206,13 @@ namespace GeoHydroCore
         }
 
 
-        void SolveTheModel(HydroSourceValues inputValues,
-                           HydroMixModelConfig config)
+        GeoHydroSolutionOutput SolveTheModel(HydroSourceValues inputValues, HydroMixModelConfig config)
         {
+            var text = new StringBuilder(
+                $"\n"
+                + $"              ===================================\n"
+                + $"Result for target: '{inputValues.Target.Source.Name}' and configuration: {config.ConfigAlias}"
+                + $"\n");
             var optanoConfig = new Configuration();
             optanoConfig.NameHandling = NameHandlingStyle.UniqueLongNames;
             optanoConfig.ComputeRemovedVariables = true;
@@ -213,10 +221,8 @@ namespace GeoHydroCore
                 var problem = new HydroMixProblem(inputValues, config, inputValues.Target);
                 using (var solver = new GLPKSolver())
                 {
-                    //solver.
                     // solve the model
                     var solution = solver.Solve(problem.Model);
-
                     // import the results back into the model 
                     foreach (var vc in problem.Model.VariableCollections)
                     {
@@ -224,7 +230,7 @@ namespace GeoHydroCore
                     }
 
                     // print objective and variable decisions
-                    Console.WriteLine($"{solution.ObjectiveValues.Single()}");
+                    //Console.WriteLine($"{solution.ObjectiveValues.Single()}");
                     var TOLERANCE = 0.001;
                     var usedSources = inputValues.Sources().Where(s => Math.Abs(problem.SourceUsed[s].Value - 1) < TOLERANCE).ToList();
                     var unusedSources = inputValues.Sources().Where(s => Math.Abs(problem.SourceUsed[s].Value) < TOLERANCE).ToList();
@@ -233,20 +239,36 @@ namespace GeoHydroCore
 
                     foreach (var source in sourcesContributions.Where(x => x.Contribution > 0.01).OrderByDescending(x => x.Contribution))
                     {
-                        Console.WriteLine($"Source: {source.Source.Code,15} | Contribution: {source.Contribution * 100:F0} ");
+                        var array = source.Source.Name.Take(25).ToArray();
+                        var formattableString = $"Source({problem.SourceUsed[source.Source].Value:F0}): {new string(array),25} | Contribution: {source.Contribution * 100:F0} ";
+                        //Console.WriteLine(formattableString);
+                        text.AppendLine(formattableString);
                     }
+
+                    text.AppendLine();
 
                     foreach (var markerInfo in inputValues.MarkerInfos().Where(x => x.Weight > 0))
                     {
                         var epsilonMarkerError = problem.EpsilonErrors[markerInfo].Value;
                         var absoluteValue = markerInfo.NormalizationCoefficient * epsilonMarkerError;
-                        Console.WriteLine($"Marker '{markerInfo.MarkerName,10}' error contribution: {epsilonMarkerError} standardized. Aboslute {absoluteValue}");
+                        //Console.WriteLine($"Marker '{markerInfo.MarkerName,10}' error contribution: {epsilonMarkerError} standardized. Aboslute {absoluteValue}");
+                        var formattableString = $"Marker {markerInfo.MarkerName,10} diff: {absoluteValue,6:F2}";
+                        //Console.WriteLine(formattableString);
+                        text.AppendLine(formattableString);
                     }
 
-                    problem.Model.VariableStatistics.WriteCSV(AppDomain.CurrentDomain.BaseDirectory);
-                    //Console.ReadLine();
+                    //problem.Model.VariableStatistics.WriteCSV(AppDomain.CurrentDomain.BaseDirectory);
                 }
             }
+            return new GeoHydroSolutionOutput()
+            {
+                TextOutput = text.ToString() + $"              ===================================\n" + '\n',
+            };
         }
+    }
+
+    internal class GeoHydroSolutionOutput
+    {
+        public string TextOutput { get; set; }
     }
 }

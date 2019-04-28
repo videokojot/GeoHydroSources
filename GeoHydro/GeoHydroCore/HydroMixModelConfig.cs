@@ -8,5 +8,6 @@
         public double MinimalSourceContribution { get; set; }
 
         public NAValuesHandling NaValuesHandling { get; set; }
+        public string ConfigAlias { get; set; }
     }
 }
