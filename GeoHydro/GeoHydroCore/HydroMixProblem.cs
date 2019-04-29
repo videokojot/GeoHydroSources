@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Linq;
 using OPTANO.Modeling.Optimization;
 using OPTANO.Modeling.Optimization.Enums;
 
@@ -13,11 +14,17 @@ namespace GeoHydroCore
 
         public VariableCollection<MarkerInfo> EpsilonErrors { get; set; }
 
-        public HydroMixProblem(HydroSourceValues values, HydroMixModelConfig config, Target target)
+        public List<Source> Sources { get; set; }
+
+        public HydroMixProblem(HydroSourceValues values,
+                               HydroMixModelConfig config,
+                               Target target,
+                               SourceConfiguration sourceConfiguration)
         {
             Model = new Model();
             //var sources = values.GetSources();
-            var sources = values.Sources();
+            var sources = values.Sources().Where(s => sourceConfiguration.SoucesUsage[s.Code]).ToList();
+            Sources = sources;
             SourceContribution = new VariableCollection<Source>(
                 Model,
                 sources,

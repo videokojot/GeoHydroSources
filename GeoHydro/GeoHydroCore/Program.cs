@@ -35,15 +35,20 @@ namespace GeoHydroCore
             }
 
             var readConfigs = program.ReadConfig("InputData\\configuration.csv", makrerInfos, inputSources);
+            var sourcesConfigs = program.ReadSourcesConfig("InputData\\sources_config.csv");
+
             var solutions = new List<GeoHydroSolutionOutput>();
             foreach (var targetSource in targets)
             {
                 var target = new Target(targetSource);
                 foreach (var config in readConfigs)
                 {
-                    var model = program.CreateModel(inputSources, makrerInfos, config, target);
-
-                    solutions.Add(program.SolveTheModel(model, config));
+                    foreach (var sourceConfiguration in sourcesConfigs)
+                    {
+                        var model = program.CreateModel(inputSources, makrerInfos, config, target);
+                        var geoHydroSolutionOutput = program.SolveTheModel(model, config, sourceConfiguration);
+                        solutions.Add(geoHydroSolutionOutput);
+                    }
                 }
             }
             Console.WriteLine("\n\n\n\n");
@@ -72,6 +77,11 @@ namespace GeoHydroCore
                         continue;
                     }
                     var split = line.Split(";");
+
+                    if (split.Length != colNames.Count)
+                    {
+                        throw new Exception($"'{configurationCsv}' ERROR: bad column count on line: '{line}'");
+                    }
 
                     var pos = 0;
                     var conf = new HydroMixModelConfig();
@@ -132,6 +142,61 @@ namespace GeoHydroCore
             return confs;
         }
 
+        private List<SourceConfiguration> ReadSourcesConfig(string confCsv)
+        {
+            var confs = new List<SourceConfiguration>();
+
+            using (var reader = File.OpenText(confCsv))
+            {
+                var hdrs = reader.ReadLine();
+                string line;
+
+                var colNames = hdrs.Split(';').ToList();
+
+                while ((line = reader.ReadLine()) != null)
+                {
+                    if (line.StartsWith("#"))
+                    {
+                        continue;
+                    }
+                    var split = line.Split(";");
+
+                    if (split.Length != colNames.Count)
+                    {
+                        throw new Exception($"'{confCsv}' ERROR: bad column count on line: '{line}'");
+                    }
+                    var conf = new SourceConfiguration();
+
+                    conf.Alias = split[0];
+
+                    var dict = new Dictionary<string, bool>();
+
+                    for (int i = 1; i < split.Length; i++)
+                    {
+                        var used = false;
+                        switch (split[i])
+                        {
+                            case "0":
+                                used = false;
+                                break;
+                            case "1":
+                                used = true;
+                                break;
+                            default:
+                                throw new Exception($"Invalid value on line: '{line}'");
+                        }
+                        dict.Add(colNames[i], used);
+                    }
+
+                    conf.SoucesUsage = dict;
+
+                    confs.Add(conf);
+
+                }
+            }
+            return confs;
+        }
+
         (List<Source>, List<MarkerInfo>) ReadInput(string file)
         {
             var sources = new List<Source>();
@@ -154,8 +219,15 @@ namespace GeoHydroCore
                     {
                         continue;
                     }
+
                     lnCount++;
                     var split = line.Split(';');
+
+                    if (split.Length != markerInfos.Count +2)
+                    {
+                        throw new Exception($"'{file}' ERROR: bad column count on line: '{line}'");
+                    }
+
                     var srcCode = split[0];
                     var srcName = split[1];
 
@@ -198,7 +270,12 @@ namespace GeoHydroCore
             return (sources, markerInfos);
         }
 
-        HydroSourceValues CreateModel(List<Source> sources, List<MarkerInfo> markerInfos, HydroMixModelConfig config, Target t)
+
+
+        HydroSourceValues CreateModel(List<Source> sources,
+                                      List<MarkerInfo> markerInfos,
+                                      HydroMixModelConfig config,
+                                      Target t)
         {
             var ret = new HydroSourceValues(sources, markerInfos, config.NaValuesHandling, t);
             ret.StandardizeValues();
@@ -206,19 +283,21 @@ namespace GeoHydroCore
         }
 
 
-        GeoHydroSolutionOutput SolveTheModel(HydroSourceValues inputValues, HydroMixModelConfig config)
+        GeoHydroSolutionOutput SolveTheModel(HydroSourceValues inputValues,
+                                             HydroMixModelConfig config,
+                                             SourceConfiguration sourceConfiguration)
         {
             var text = new StringBuilder(
                 $"\n"
                 + $"              ===================================\n"
-                + $"Result for target: '{inputValues.Target.Source.Name}' and configuration: {config.ConfigAlias}"
-                + $"\n");
+                + $"Result for target: '{inputValues.Target.Source.Name}' and configuration: '{config.ConfigAlias}' and source conf: '{sourceConfiguration.Alias}' :"
+                + $"\n\n");
             var optanoConfig = new Configuration();
             optanoConfig.NameHandling = NameHandlingStyle.UniqueLongNames;
             optanoConfig.ComputeRemovedVariables = true;
             using (var scope = new ModelScope(optanoConfig))
             {
-                var problem = new HydroMixProblem(inputValues, config, inputValues.Target);
+                var problem = new HydroMixProblem(inputValues, config, inputValues.Target, sourceConfiguration);
                 using (var solver = new GLPKSolver())
                 {
                     // solve the model
@@ -232,10 +311,8 @@ namespace GeoHydroCore
                     // print objective and variable decisions
                     //Console.WriteLine($"{solution.ObjectiveValues.Single()}");
                     var TOLERANCE = 0.001;
-                    var usedSources = inputValues.Sources().Where(s => Math.Abs(problem.SourceUsed[s].Value - 1) < TOLERANCE).ToList();
-                    var unusedSources = inputValues.Sources().Where(s => Math.Abs(problem.SourceUsed[s].Value) < TOLERANCE).ToList();
 
-                    var sourcesContributions = inputValues.Sources().Select(s => (Source: s, Contribution: problem.SourceContribution[s].Value));
+                    var sourcesContributions = problem.Sources.Select(s => (Source: s, Contribution: problem.SourceContribution[s].Value));
 
                     foreach (var source in sourcesContributions.Where(x => x.Contribution > 0.01).OrderByDescending(x => x.Contribution))
                     {
@@ -265,6 +342,12 @@ namespace GeoHydroCore
                 TextOutput = text.ToString() + $"              ===================================\n" + '\n',
             };
         }
+    }
+
+    internal class SourceConfiguration
+    {
+        public string Alias { get; set; }
+        public Dictionary<string, bool> SoucesUsage { get; set; }
     }
 
     internal class GeoHydroSolutionOutput

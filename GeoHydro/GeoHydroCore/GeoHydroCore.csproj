@@ -10,6 +10,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="InputData\sources_config.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="InputData\configuration.csv">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -64,7 +67,5 @@
     <Copy SourceFiles="..\glpk-4.65\w64\glpk_4_65.dll" DestinationFolder="$(OutDir)" ContinueOnError="true" />
     <Copy SourceFiles="..\glpk-4.65\w64\libglpk_cli_native.dll" DestinationFolder="$(OutDir)" ContinueOnError="true" />
   </Target>-->
-
-
 
 </Project>
