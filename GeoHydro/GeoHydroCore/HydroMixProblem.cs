@@ -12,7 +12,8 @@ namespace GeoHydroCore
         public VariableCollection<Source> SourceContribution { get; set; }
         public VariableCollection<Source> SourceUsed { get; set; }
 
-        public VariableCollection<MarkerInfo> EpsilonErrors { get; set; }
+        public VariableCollection<MarkerInfo> PositiveErrors { get; set; }
+        public VariableCollection<MarkerInfo> NegativeErrors { get; set; }
 
         public List<Source> Sources { get; set; }
 
@@ -43,12 +44,20 @@ namespace GeoHydroCore
                 s => 1,
                 s => OPTANO.Modeling.Optimization.Enums.VariableType.Binary);
 
-            EpsilonErrors = new VariableCollection<MarkerInfo>(Model,
+            PositiveErrors = new VariableCollection<MarkerInfo>(Model,
                                                                values.MarkerInfos(),
-                                                               "Epsilon error for each marker", mi => $"Error for marker: {mi.MarkerName}.",
+                                                               "Epsilon (+) error for each marker", mi => $"Error for marker: {mi.MarkerName}.",
                                                                mi => 0,
                                                                mi => double.MaxValue,
                                                                mi => VariableType.Continuous
+            );
+
+            NegativeErrors = new VariableCollection<MarkerInfo>(Model,
+                                                                values.MarkerInfos(),
+                                                                "Epsilon (-) error for each marker", mi => $"Error for marker: {mi.MarkerName}.",
+                                                                mi => double.MinValue,
+                                                                mi => 0,
+                                                                mi => VariableType.Continuous
             );
 
             // https://math.stackexchange.com/questions/2571788/indicator-variable-if-x-is-in-specific-range
@@ -91,18 +100,26 @@ namespace GeoHydroCore
             // equation for each marker
             foreach (var markerInfo in values.MarkerInfos().Where(mi => mi.Weight > 0))
             {
-                var markerEpsilon = EpsilonErrors[markerInfo];
+                var positiveEpsilon = PositiveErrors[markerInfo];
+                var negativeEpsilon = NegativeErrors[markerInfo];
                 // get all values for current marker
                 var markerValues = sources.Where(x => x.MaxSourceContribution > 0).Select(s => s.MarkerValues.Single(mv => mv.MarkerInfo == markerInfo));
 
                 var sourcesContributedToMarker = Expression.Sum(
                         markerValues.Select(x => SourceContribution[x.Source] * x.Value));
 
-                Model.AddConstraint(sourcesContributedToMarker == markerEpsilon + target[markerInfo]);
+                Model.AddConstraint(sourcesContributedToMarker == positiveEpsilon + target[markerInfo]
+                                    - negativeEpsilon
+                                    );
             }
 
             // min: diff between target and resulting mix
-            Model.AddObjective(new Objective(Expression.Sum(values.MarkerInfos().Where(mi => mi.Weight > 0).Select(mi => EpsilonErrors[mi] * mi.Weight)),
+            Model.AddObjective(new Objective(Expression.Sum(
+                                                 values.MarkerInfos().Where(mi => mi.Weight > 0).Select(mi => PositiveErrors[mi] * mi.Weight)
+
+                                                         .Concat(values.MarkerInfos().Where(mi => mi.Weight > 0).Select(mi => -NegativeErrors[mi] * mi.Weight))
+
+                                                        ),
                                              "Difference between mix and target.",
                                              ObjectiveSense.Minimize));
         }

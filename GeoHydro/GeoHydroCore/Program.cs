@@ -9,6 +9,7 @@ using OPTANO.Modeling.Optimization;
 using OPTANO.Modeling.Optimization.Configuration;
 using OPTANO.Modeling.Optimization.Solver.GLPK;
 
+
 namespace GeoHydroCore
 {
     class Program
@@ -23,18 +24,18 @@ namespace GeoHydroCore
         static void Test()
         {
             var program = new Program();
-            var (inputSources, makrerInfos) = program.ReadInput("InputData\\input_sources.csv");
+            var (inputSources, markerInfos) = program.ReadInput("InputData\\input_sources.csv");
             var (targets, _) = program.ReadInput("InputData\\targets.csv");
 
             foreach (var target in targets)
             {
                 foreach (var targetMarkerValue in target.MarkerValues)
                 {
-                    targetMarkerValue.MarkerInfo = makrerInfos.SingleOrDefault(x => x.MarkerName == targetMarkerValue.MarkerInfo.MarkerName);
+                    targetMarkerValue.MarkerInfo = markerInfos.SingleOrDefault(x => x.MarkerName == targetMarkerValue.MarkerInfo.MarkerName);
                 }
             }
 
-            var readConfigs = program.ReadConfig("InputData\\configuration.csv", makrerInfos, inputSources);
+            var readConfigs = program.ReadConfig("InputData\\configuration.csv", markerInfos, inputSources);
             var sourcesConfigs = program.ReadSourcesConfig("InputData\\sources_config.csv");
 
             var solutions = new List<GeoHydroSolutionOutput>();
@@ -45,7 +46,7 @@ namespace GeoHydroCore
                 {
                     foreach (var sourceConfiguration in sourcesConfigs)
                     {
-                        var model = program.CreateModel(inputSources, makrerInfos, config, target);
+                        var model = program.CreateModel(inputSources, markerInfos, config, target);
                         var geoHydroSolutionOutput = program.SolveTheModel(model, config, sourceConfiguration);
                         solutions.Add(geoHydroSolutionOutput);
                     }
@@ -56,6 +57,38 @@ namespace GeoHydroCore
             foreach (var geoHydroSolutionOutput in solutions)
             {
                 Console.WriteLine(geoHydroSolutionOutput.TextOutput);
+            }
+
+            WriteCSV(solutions, "output.csv", markerInfos);
+        }
+
+        private static void WriteCSV(List<GeoHydroSolutionOutput> solutions, string outputCsv, List<MarkerInfo> markerinfos)
+        {
+            using (var f = new StreamWriter(outputCsv))
+            {
+                // headers
+                f.WriteLine("Target;ConfigAlias;SourcesConfig;Mix;AbsoluteError;" + string.Join(';', markerinfos.Select(x => x.MarkerName)));
+
+                // rows
+                foreach (var s in solutions.OrderBy(x => x.Target.Source.Name).ThenBy(x => x.NormalizedError))
+                {
+
+                    var strings = new List<string>()
+                    {
+                        s.Target.Source.Name,
+                        s.ConfigALias,
+                        s.SourcesConfigAlias,
+                        string.Join(',', s.UsedSources.OrderByDescending(x => x.Contribution).Select(x => $"{x.Source.Code}:{x.Contribution.ToString("F3")}")),
+                        s.NormalizedError.ToString(),
+                    };
+
+                    var line = string.Join(';',
+                                           strings.Concat(
+                                                       markerinfos.Select(x => s.ResultingMix[x.MarkerName].ToString())
+                                                   )
+                                                  .ToArray());
+                    f.WriteLine(line);
+                }
             }
         }
 
@@ -223,7 +256,7 @@ namespace GeoHydroCore
                     lnCount++;
                     var split = line.Split(';');
 
-                    if (split.Length != markerInfos.Count +2)
+                    if (split.Length != markerInfos.Count + 2)
                     {
                         throw new Exception($"'{file}' ERROR: bad column count on line: '{line}'");
                     }
@@ -295,9 +328,12 @@ namespace GeoHydroCore
             var optanoConfig = new Configuration();
             optanoConfig.NameHandling = NameHandlingStyle.UniqueLongNames;
             optanoConfig.ComputeRemovedVariables = true;
+            GeoHydroSolutionOutput geoHydroSolutionOutput;
+
             using (var scope = new ModelScope(optanoConfig))
             {
                 var problem = new HydroMixProblem(inputValues, config, inputValues.Target, sourceConfiguration);
+
                 using (var solver = new GLPKSolver())
                 {
                     // solve the model
@@ -313,34 +349,85 @@ namespace GeoHydroCore
                     var TOLERANCE = 0.001;
 
                     var sourcesContributions = problem.Sources.Select(s => (Source: s, Contribution: problem.SourceContribution[s].Value));
+                    var resultingMix = inputValues.MarkerInfos().Select(x => x.MarkerName).ToDictionary(x => x, x => 0.0);
 
                     foreach (var source in sourcesContributions.Where(x => x.Contribution > 0.01).OrderByDescending(x => x.Contribution))
                     {
                         var array = source.Source.Name.Take(25).ToArray();
-                        var formattableString = $"Source({problem.SourceUsed[source.Source].Value:F0}): {new string(array),25} | Contribution: {source.Contribution * 100:F0} ";
+                        var sourceContribution = problem.SourceUsed[source.Source].Value;
+                        var formattableString = $"Source({sourceContribution:F0}): {new string(array),25} | Contribution: {source.Contribution * 100:F1} ";
                         //Console.WriteLine(formattableString);
                         text.AppendLine(formattableString);
+
+                        // todo compute 
+                        foreach (var markerVal in source.Source.MarkerValues)
+                        {
+                            //resultingMix[markerVal.MarkerInfo.MarkerName] += markerVal.Value * markerVal.MarkerInfo.NormalizationCoefficient * source.Contribution;
+                            resultingMix[markerVal.MarkerInfo.MarkerName] += markerVal.OriginalValue.Value * source.Contribution;
+                        }
                     }
 
                     text.AppendLine();
-
+                    var totalError = 0.0;
                     foreach (var markerInfo in inputValues.MarkerInfos().Where(x => x.Weight > 0))
                     {
-                        var epsilonMarkerError = problem.EpsilonErrors[markerInfo].Value;
-                        var absoluteValue = markerInfo.NormalizationCoefficient * epsilonMarkerError;
-                        //Console.WriteLine($"Marker '{markerInfo.MarkerName,10}' error contribution: {epsilonMarkerError} standardized. Aboslute {absoluteValue}");
-                        var formattableString = $"Marker {markerInfo.MarkerName,10} diff: {absoluteValue,6:F2}";
-                        //Console.WriteLine(formattableString);
+                        var epsilonMarkerErrorPos = problem.PositiveErrors[markerInfo].Value;
+                        var epsilonMarkerErrorNeg = problem.NegativeErrors[markerInfo].Value;
+                        double epsilonMarkerError;// = Math.Max(-epsilonMarkerErrorNeg, epsilonMarkerErrorPos);
+
+                        if (epsilonMarkerErrorNeg >= 0 && epsilonMarkerErrorPos> 0)
+                        {
+                            epsilonMarkerError = epsilonMarkerErrorPos;
+                        }
+                        else if (epsilonMarkerErrorNeg < 0 && epsilonMarkerErrorPos <= 0)
+                        {
+                            epsilonMarkerError = epsilonMarkerErrorNeg;
+                        }
+                        //else if (epsilonMarkerErrorNeg <= 0 && epsilonMarkerErrorPos >= 0)
+                        //{
+                        //    throw new InvalidOperationException("At least one of the epsilon errors should be zero");
+                        //}
+                        else
+                        {
+                            // both zero?
+                            epsilonMarkerError = 0;
+                        }
+
+
+                        var denormalizedError = markerInfo.NormalizationCoefficient * epsilonMarkerError;
+                        totalError += Math.Abs(epsilonMarkerError);
+
+                        var originalTargetValue = inputValues.Target.Source[markerInfo].OriginalValue.Value;
+
+                        var computedValue = resultingMix[markerInfo.MarkerName] + denormalizedError;
+
+                        string diffInfo = null;
+                        if (Math.Abs(computedValue - originalTargetValue) > TOLERANCE)
+                        {
+                            // todo cross check
+                            diffInfo = $"| diffComputed/Target: ({computedValue,6:F3}/{originalTargetValue,6:F3})";
+                        }
+
+                        var diff = Math.Abs(originalTargetValue - resultingMix[markerInfo.MarkerName]);
+
+                        var formattableString = $"Marker {markerInfo.MarkerName,10} | diff: {denormalizedError,6:F2} | mixValue: {resultingMix[markerInfo.MarkerName],6:F2} {diffInfo}";
                         text.AppendLine(formattableString);
                     }
 
                     //problem.Model.VariableStatistics.WriteCSV(AppDomain.CurrentDomain.BaseDirectory);
+                    geoHydroSolutionOutput = new GeoHydroSolutionOutput()
+                    {
+                        TextOutput = text.ToString() + $"              ===================================\n" + '\n',
+                        ConfigALias = config.ConfigAlias,
+                        Target = inputValues.Target,
+                        SourcesConfigAlias = sourceConfiguration.Alias,
+                        UsedSources = sourcesContributions.Where(x => x.Contribution > 0.01).OrderByDescending(x => x.Contribution),
+                        NormalizedError = totalError,
+                        ResultingMix = resultingMix,
+                    };
                 }
             }
-            return new GeoHydroSolutionOutput()
-            {
-                TextOutput = text.ToString() + $"              ===================================\n" + '\n',
-            };
+            return geoHydroSolutionOutput;
         }
     }
 
@@ -353,5 +440,11 @@ namespace GeoHydroCore
     internal class GeoHydroSolutionOutput
     {
         public string TextOutput { get; set; }
+        public string ConfigALias { get; set; }
+        public string SourcesConfigAlias { get; set; }
+        public Dictionary<string, double> ResultingMix { get; set; }
+        public double NormalizedError { get; set; }
+        public Target Target { get; set; }
+        public IOrderedEnumerable<(Source Source, double Contribution)> UsedSources { get; set; }
     }
 }
