@@ -18,10 +18,18 @@ namespace GeoHydroCore
         // https://groups.google.com/forum/#!topic/optano-modeling/FN6V4u6wWpM
         static void Main(string[] args)
         {
-            Test();
+            if (args.Length == 1)
+            {
+                Test(args[0]);
+            }
+            else
+            {
+                var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                Test($"output_{timestamp}.csv");
+            }
         }
 
-        static void Test()
+        static void Test(string outputCsvFile)
         {
             var program = new Program();
             var (inputSources, markerInfos) = program.ReadInput("InputData\\input_sources.csv");
@@ -59,7 +67,10 @@ namespace GeoHydroCore
                 Console.WriteLine(geoHydroSolutionOutput.TextOutput);
             }
 
-            WriteCSV(solutions, "output.csv", markerInfos);
+            if (outputCsvFile != null)
+            {
+                WriteCSV(solutions, outputCsvFile, markerInfos);
+            }
         }
 
         private static void WriteCSV(List<GeoHydroSolutionOutput> solutions, string outputCsv, List<MarkerInfo> markerinfos)
@@ -88,6 +99,7 @@ namespace GeoHydroCore
                                                    )
                                                   .ToArray());
                     f.WriteLine(line);
+                    f.Flush();
                 }
             }
         }
@@ -362,55 +374,36 @@ namespace GeoHydroCore
                         // todo compute 
                         foreach (var markerVal in source.Source.MarkerValues)
                         {
-                            //resultingMix[markerVal.MarkerInfo.MarkerName] += markerVal.Value * markerVal.MarkerInfo.NormalizationCoefficient * source.Contribution;
-                            resultingMix[markerVal.MarkerInfo.MarkerName] += markerVal.OriginalValue.Value * source.Contribution;
+                            resultingMix[markerVal.MarkerInfo.MarkerName] += markerVal.Value * markerVal.MarkerInfo.NormalizationCoefficient * source.Contribution;
+                            //resultingMix[markerVal.MarkerInfo.MarkerName] += markerVal.OriginalValue.Value * source.Contribution;
                         }
                     }
 
                     text.AppendLine();
                     var totalError = 0.0;
-                    foreach (var markerInfo in inputValues.MarkerInfos().Where(x => x.Weight > 0))
+                    foreach (var markerInfo in inputValues.MarkerInfos()
+                                                           //.Where(x => x.Weight > 0)
+                                                           )
                     {
                         var epsilonMarkerErrorPos = problem.PositiveErrors[markerInfo].Value;
                         var epsilonMarkerErrorNeg = problem.NegativeErrors[markerInfo].Value;
-                        double epsilonMarkerError;// = Math.Max(-epsilonMarkerErrorNeg, epsilonMarkerErrorPos);
 
-                        if (epsilonMarkerErrorNeg >= 0 && epsilonMarkerErrorPos> 0)
-                        {
-                            epsilonMarkerError = epsilonMarkerErrorPos;
-                        }
-                        else if (epsilonMarkerErrorNeg < 0 && epsilonMarkerErrorPos <= 0)
-                        {
-                            epsilonMarkerError = epsilonMarkerErrorNeg;
-                        }
-                        //else if (epsilonMarkerErrorNeg <= 0 && epsilonMarkerErrorPos >= 0)
-                        //{
-                        //    throw new InvalidOperationException("At least one of the epsilon errors should be zero");
-                        //}
-                        else
-                        {
-                            // both zero?
-                            epsilonMarkerError = 0;
-                        }
-
-
-                        var denormalizedError = markerInfo.NormalizationCoefficient * epsilonMarkerError;
-                        totalError += Math.Abs(epsilonMarkerError);
+                        totalError += Math.Abs(epsilonMarkerErrorNeg);
+                        totalError += Math.Abs(epsilonMarkerErrorPos);
 
                         var originalTargetValue = inputValues.Target.Source[markerInfo].OriginalValue.Value;
 
-                        var computedValue = resultingMix[markerInfo.MarkerName] + denormalizedError;
+                        var computedValue = resultingMix[markerInfo.MarkerName] - (epsilonMarkerErrorPos * markerInfo.NormalizationCoefficient) + (epsilonMarkerErrorNeg * markerInfo.NormalizationCoefficient);
 
                         string diffInfo = null;
                         if (Math.Abs(computedValue - originalTargetValue) > TOLERANCE)
                         {
-                            // todo cross check
                             diffInfo = $"| diffComputed/Target: ({computedValue,6:F3}/{originalTargetValue,6:F3})";
                         }
 
-                        var diff = Math.Abs(originalTargetValue - resultingMix[markerInfo.MarkerName]);
+                        var realDiff = resultingMix[markerInfo.MarkerName] - originalTargetValue;
 
-                        var formattableString = $"Marker {markerInfo.MarkerName,10} | diff: {denormalizedError,6:F2} | mixValue: {resultingMix[markerInfo.MarkerName],6:F2} {diffInfo}";
+                        var formattableString = $"Marker({markerInfo.Weight:F0}) {markerInfo.MarkerName,10} | targetVal: {originalTargetValue,6:F2}  | diff: ({realDiff,6:F2}) | mixValue: {resultingMix[markerInfo.MarkerName],6:F2} {diffInfo}";
                         text.AppendLine(formattableString);
                     }
 

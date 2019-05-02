@@ -55,8 +55,8 @@ namespace GeoHydroCore
             NegativeErrors = new VariableCollection<MarkerInfo>(Model,
                                                                 values.MarkerInfos(),
                                                                 "Epsilon (-) error for each marker", mi => $"Error for marker: {mi.MarkerName}.",
-                                                                mi => double.MinValue,
                                                                 mi => 0,
+                                                                mi => double.MaxValue,
                                                                 mi => VariableType.Continuous
             );
 
@@ -98,7 +98,9 @@ namespace GeoHydroCore
             }
 
             // equation for each marker
-            foreach (var markerInfo in values.MarkerInfos().Where(mi => mi.Weight > 0))
+            foreach (var markerInfo in values.MarkerInfos()
+                                             //.Where(mi => mi.Weight > 0)
+                                              )
             {
                 var positiveEpsilon = PositiveErrors[markerInfo];
                 var negativeEpsilon = NegativeErrors[markerInfo];
@@ -108,16 +110,14 @@ namespace GeoHydroCore
                 var sourcesContributedToMarker = Expression.Sum(
                         markerValues.Select(x => SourceContribution[x.Source] * x.Value));
 
-                Model.AddConstraint(sourcesContributedToMarker == positiveEpsilon + target[markerInfo]
-                                    - negativeEpsilon
-                                    );
+                Model.AddConstraint(sourcesContributedToMarker == positiveEpsilon + target[markerInfo] - negativeEpsilon);
             }
 
             // min: diff between target and resulting mix
             Model.AddObjective(new Objective(Expression.Sum(
                                                  values.MarkerInfos().Where(mi => mi.Weight > 0).Select(mi => PositiveErrors[mi] * mi.Weight)
 
-                                                         .Concat(values.MarkerInfos().Where(mi => mi.Weight > 0).Select(mi => -NegativeErrors[mi] * mi.Weight))
+                                                         .Concat(values.MarkerInfos().Where(mi => mi.Weight > 0).Select(mi => NegativeErrors[mi] * mi.Weight))
 
                                                         ),
                                              "Difference between mix and target.",
