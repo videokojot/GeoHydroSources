@@ -8,7 +8,7 @@ namespace GeoHydroCore
 {
     internal class ConfigReader
     {
-        public List<HydroMixModelConfig> ReadConfig(string configurationCsv, List<MarkerInfo> markerInfos, List<Source> sources)
+        public List<HydroMixModelConfig> ReadConfig(string configurationCsv)
         {
             var confs = new List<HydroMixModelConfig>();
 
@@ -39,6 +39,7 @@ namespace GeoHydroCore
                     conf.MinimalSourceContribution = double.Parse(split[pos++], CultureInfo.InvariantCulture);
                     conf.MinSourcesUsed = int.Parse(split[pos++]);
                     conf.MaxSourcesUsed = int.Parse(split[pos++]);
+                    conf.MarkerWeigths = new Dictionary<string, double>();
 
                     var parsed = Enum.TryParse<NAValuesHandling>(split[pos++], out var res);
                     if (!parsed)
@@ -49,41 +50,12 @@ namespace GeoHydroCore
 
                     for (int i = pos; i < split.Length; i++)
                     {
-                        var src = sources.SingleOrDefault(x => x.Code == colNames[i]);
-                        var mi = markerInfos.SingleOrDefault(x => x.MarkerName == colNames[i]);
+                        var colName = colNames[i];
 
-                        if (src == null && mi == null)
-                        {
-                            throw new InvalidOperationException("Unknown col name " + colNames[i]);
-                        }
                         double val;
 
-                        if (string.IsNullOrEmpty(split[i]))
-                        {
-                            val = 1;
-                        }
-                        else
-                        {
-                            val = double.Parse(split[i], CultureInfo.InvariantCulture);
-                        }
-
-                        if (src != null)
-                        {
-                            if (val > 1 || val < 0)
-                            {
-                                throw new InvalidOperationException("Source max contribution must be between 0 and 1!");
-                            }
-                            src.MaxSourceContribution = val;
-                        }
-
-                        if (mi != null)
-                        {
-                            if (val < 0)
-                            {
-                                throw new InvalidOperationException("Marker weight cannot be negative!");
-                            }
-                            mi.Weight = val;
-                        }
+                        val = double.Parse(split[i], CultureInfo.InvariantCulture);
+                        conf.MarkerWeigths.Add(colName, val);
                     }
                     confs.Add(conf);
                 }
@@ -119,9 +91,13 @@ namespace GeoHydroCore
                     conf.Alias = split[0];
 
                     var dict = new Dictionary<string, bool>();
+                    var maxDict = new Dictionary<string, double>();
+
 
                     for (int i = 1; i < split.Length; i++)
                     {
+                        var sourceContrib = double.Parse(split[i], CultureInfo.InvariantCulture);
+
                         var used = false;
                         switch (split[i])
                         {
@@ -134,10 +110,19 @@ namespace GeoHydroCore
                             default:
                                 throw new Exception($"Invalid value on line: '{line}'");
                         }
+
+                        used = sourceContrib > 0;
+
+                        if (sourceContrib > 1)
+                        {
+                            throw new InvalidOperationException("Source max contribution cannnot be higher than 1");
+                        }
+                        maxDict.Add(colNames[i], sourceContrib);
                         dict.Add(colNames[i], used);
                     }
 
-                    conf.SoucesUsage = dict;
+                    conf.SourcesUsage = dict;
+                    conf.MaxSourceContribution = maxDict;
 
                     confs.Add(conf);
 

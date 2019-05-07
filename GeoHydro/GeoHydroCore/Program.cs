@@ -41,7 +41,7 @@ namespace GeoHydroCore
                 }
             }
 
-            var readConfigs = configReader.ReadConfig("InputData\\configuration.csv", markerInfos, inputSources);
+            var readConfigs = configReader.ReadConfig("InputData\\configuration.csv");
             var sourcesConfigs = configReader.ReadSourcesConfig("InputData\\sources_config.csv");
 
             var solutions = new List<GeoHydroSolutionOutput>();
@@ -53,7 +53,7 @@ namespace GeoHydroCore
                 {
                     foreach (var sourceConfiguration in sourcesConfigs)
                     {
-                        var model = program.CreateModel(inputSources, markerInfos, config, target);
+                        var model = program.CreateModel(inputSources, markerInfos, config, target, sourceConfiguration);
                         var geoHydroSolutionOutput = program.SolveTheModel(model, config, sourceConfiguration);
                         solutions.Add(geoHydroSolutionOutput);
                     }
@@ -108,10 +108,33 @@ namespace GeoHydroCore
         HydroSourceValues CreateModel(List<Source> sources,
                                       List<MarkerInfo> markerInfos,
                                       HydroMixModelConfig config,
-                                      Target t)
+                                      Target t, SourceConfiguration sourcesConfiguration)
         {
             var ret = new HydroSourceValues(sources, markerInfos, config.NaValuesHandling, t);
             ret.StandardizeValues();
+
+            foreach (var configMarkerWeigth in config.MarkerWeigths)
+            {
+                var mi = markerInfos.Single(x => x.MarkerName == configMarkerWeigth.Key);
+                if (configMarkerWeigth.Value < 0)
+                {
+                    throw new InvalidOperationException("Marker weight cannot be negative!");
+                }
+
+                mi.Weight = configMarkerWeigth.Value;
+            }
+
+            foreach (var src in sources)
+            {
+                var val = sourcesConfiguration.MaxSourceContribution[src.Code];
+
+                if (val > 1 || val < 0)
+                {
+                    throw new InvalidOperationException("Source max contribution must be between 0 and 1!");
+                }
+                src.MaxSourceContribution = val;
+            }
+
             return ret;
         }
 

@@ -24,7 +24,7 @@ namespace GeoHydroCore
         {
             Model = new Model();
             //var sources = values.GetSources();
-            var sources = values.Sources().Where(s => sourceConfiguration.SoucesUsage[s.Code]).ToList();
+            var sources = values.Sources().Where(s => sourceConfiguration.SourcesUsage[s.Code]).ToList();
             Sources = sources;
             SourceContribution = new VariableCollection<Source>(
                 Model,

@@ -1,4 +1,6 @@
-﻿namespace GeoHydroCore
+﻿using System.Collections.Generic;
+
+namespace GeoHydroCore
 {
     class HydroMixModelConfig
     {
@@ -9,5 +11,7 @@
 
         public NAValuesHandling NaValuesHandling { get; set; }
         public string ConfigAlias { get; set; }
+
+        public Dictionary<string,double> MarkerWeigths { get; set; }
     }
 }
