@@ -77,7 +77,7 @@ namespace GeoHydroCore
             using (var f = new StreamWriter(outputCsv))
             {
                 // headers
-                f.WriteLine("Target;ConfigAlias;SourcesConfig;Mix;AbsoluteError;" + string.Join(';', markerinfos.Select(x => x.MarkerName)));
+                f.WriteLine("Target;ConfigAlias;SourcesConfig;Mix;AbsoluteError;OptimalizedError;" + string.Join(';', markerinfos.Select(x => x.MarkerName)));
 
                 // rows
                 foreach (var s in solutions.OrderBy(x => x.Target.Source.Name).ThenBy(x => x.NormalizedError))
@@ -90,6 +90,7 @@ namespace GeoHydroCore
                         s.SourcesConfigAlias,
                         string.Join(',', s.UsedSources.OrderByDescending(x => x.Contribution).Select(x => $"{x.Source.Code}:{x.Contribution.ToString("F3")}")),
                         s.NormalizedError.ToString(),
+                        s.OptimalizedError.ToString()
                     };
 
                     var line = string.Join(';',
@@ -187,6 +188,7 @@ namespace GeoHydroCore
 
                     text.AppendLine();
                     var totalError = 0.0;
+                    var optimizedError = 0.0;
                     foreach (var markerInfo in inputValues.MarkerInfos()
                                                            //.Where(x => x.Weight > 0)
                                                            )
@@ -194,8 +196,12 @@ namespace GeoHydroCore
                         var epsilonMarkerErrorPos = problem.PositiveErrors[markerInfo].Value;
                         var epsilonMarkerErrorNeg = problem.NegativeErrors[markerInfo].Value;
 
-                        totalError += Math.Abs(epsilonMarkerErrorNeg);
-                        totalError += Math.Abs(epsilonMarkerErrorPos);
+                        totalError += Math.Abs(epsilonMarkerErrorNeg) + Math.Abs(epsilonMarkerErrorPos);
+
+                        if (markerInfo.Weight > 0)
+                        {
+                            optimizedError += Math.Abs(epsilonMarkerErrorNeg) + Math.Abs(epsilonMarkerErrorPos);
+                        }
 
                         var originalTargetValue = inputValues.Target.Source[markerInfo].OriginalValue.Value;
 
@@ -222,6 +228,7 @@ namespace GeoHydroCore
                         UsedSources = sourcesContributions.Where(x => x.Contribution > 0.01).OrderByDescending(x => x.Contribution),
                         NormalizedError = totalError,
                         ResultingMix = resultingMix,
+                        OptimalizedError = optimizedError
                     };
                 }
             }

@@ -1,5 +1,10 @@
 ConfigAlias;Morava;RimVyv;HzovdVytok;Spranek;Desna;Oskava;Rachava;Javoricka;Andelicka;NadPruchod;Cholinka;Sumice;Mirovka;drenazCerlinka;mixJavSpra;mixJavSpraRach;PrumQB;PrumQA
 #bezDrenaze;1;1;1;1;1;1;1;1;1;1;1;1;1;0;1;1;1;1
 #All;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1
-vse_bez_drenaze;1;1;1;1;1;1;1;1;1;1;1;1;1;0;1;1;1;1
-zdroje_s_izotopy_;1;1;1;1;1;1;1;1;0;0;1;1;1;0;1;1;0;0
+#vse_bez_drenaze;1;1;1;1;1;1;1;1;1;1;1;1;1;0;1;1;1;1
+#zdroje_s_izotopy_;1;1;1;1;1;1;1;1;0;0;1;1;1;0;1;1;0;0
+#IZOTOP;1;1;1;1;1;1;1;1;0;0;1;1;1;0;1;1;0;0
+BEZ-MIR;1;1;1;1;1;1;1;1;1;1;1;1;0;0;0;1;1;1
+S-MIR;1;1;1;1;1;1;1;1;1;1;1;1;1;0;0;1;1;1
+#IZOTOP_bez_Oskavy;1;1;1;1;1;0;1;1;0;0;1;1;1;0;1;1;0;0
+#IZOTOP_bez_Oskavy+Desne;1;1;1;1;0;0;1;1;0;0;1;1;1;0;1;1;0;0

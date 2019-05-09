@@ -12,5 +12,6 @@ namespace GeoHydroCore
         public double NormalizedError { get; set; }
         public Target Target { get; set; }
         public IOrderedEnumerable<(Source Source, double Contribution)> UsedSources { get; set; }
+        public double OptimalizedError { get; set; }
     }
 }

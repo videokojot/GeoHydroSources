@@ -1,5 +1,6 @@
 ConfigAlias;MinimalSourceContribution;MinSourcesUsed;MaxSourcesUsed;NaValuesHandling;Li+;NH4+;Na+;Mg2+;K+;Ca2+;Mn2+;Fe;(HCO3)-;(NO3)-;F-;(SO4)2-;Cl-;d2H;d18O
 #Config;0.01;0;100;SetMean;0;0;1;1;1;1;1;1;1;0;1;1;1;0;0
-chemie_komplet;0.01;0;100;SetMean;0;0;1;1;1;1;0;0;1;1;1;1;1;0;0
-chemie_bez_K,NO3,SO4;0.01;0;100;SetMean;0;0;1;1;0;1;0;0;1;0;1;0;1;0;0
-pouze_izotopy;0.01;0;100;SetMean;0;0;0;0;0;0;0;0;0;0;0;0;0;1;1
+#chemie_komplet;0.01;0;100;SetMean;0;0;1;1;1;1;0;0;1;1;1;1;1;0;0
+#chemie_bez_K,NO3,SO4;0.01;0;100;SetMean;0;0;1;1;0;1;0;0;1;0;1;0;1;0;0
+#pouze_izotopy;0.01;0;100;SetMean;0;0;0;0;0;0;0;0;0;0;0;0;0;1;1
+K4;0.01;0;100;SetMean;0;0;1;1;1;1;0;0;1;1;1;1;1;1;1
